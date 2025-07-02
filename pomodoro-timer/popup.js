@@ -1,30 +1,44 @@
 let updateInterval;
-document.getElementById('reset').disabled = false;
+const timerDisplay = document.getElementById('timer');
+const startBtn = document.getElementById('start');
+const stopBtn = document.getElementById('stop');
+const resetBtn = document.getElementById('reset');
+const breakBtn = document.getElementById('start-break');
 
-document.getElementById('start').addEventListener('click', () => {
+resetBtn.disabled = false;
+
+startBtn.addEventListener('click', () => {
     chrome.runtime.sendMessage({ command: 'start' });
-    console.log("Start command sent");  
+    console.log("Start command sent");
+    resetBtn.disabled = false;
     startUpdatingTimer();
 });
 
-document.getElementById('stop').addEventListener('click', () => {
+stopBtn.addEventListener('click', () => {
     chrome.runtime.sendMessage({ command: 'stop' });
     console.log("Stop command sent");
-    document.getElementById('reset').disabled = false;
+    resetBtn.disabled = false;
     stopUpdatingTimer();
 });
 
-document.getElementById('reset').addEventListener('click', () => {
+resetBtn.addEventListener('click', () => {
     chrome.runtime.sendMessage({ command: 'reset' });
     console.log("Reset command sent");
+    resetBtn.disabled = true;
+    breakBtn.style.display = 'none'; // Hide break button if visible
+    startUpdatingTimer();
+});
+
+breakBtn.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ command: 'start_break' });
+    console.log("Start Break command sent");
+    breakBtn.style.display = 'none'; // Hide after clicked
+    resetBtn.disabled = false;
     startUpdatingTimer();
 });
 
 function startUpdatingTimer() {
-    // Clear any existing interval to avoid multiple intervals running
     if (updateInterval) clearInterval(updateInterval);
-
-    // Request an immediate update and then start periodic updates
     chrome.runtime.sendMessage({ command: 'get_time' });
     updateInterval = setInterval(() => {
         chrome.runtime.sendMessage({ command: 'get_time' });
@@ -32,14 +46,17 @@ function startUpdatingTimer() {
 }
 
 function stopUpdatingTimer() {
-    // Clear the interval to stop requesting updates
     clearInterval(updateInterval);
 }
 
-startUpdatingTimer();
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.timer) {
-        document.getElementById('timer').textContent = message.timer;
+        timerDisplay.textContent = message.timer;
+    }
+    if (message.showBreakButton) {
+        breakBtn.style.display = 'inline-block'; // Show break button
     }
 });
+
+// Begin polling when popup opens
+startUpdatingTimer();

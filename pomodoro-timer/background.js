@@ -1,5 +1,6 @@
 let time = 25 * 60; // Set the timer to 25 minutes
 let isRunning = false;
+let mode = "work"; // or "break"
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.command === 'start') {
@@ -10,7 +11,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         resetTimer();
     } else if (message.command === 'get_time') {
         sendTimeUpdate();  // Send the current time to the popup when requested
+    } else if (message.command === 'start_break') {
+        time = 5 * 60;
+        mode = "break";
+        startTimer();
     }
+    
 });
 
 function startTimer() {
@@ -56,31 +62,66 @@ function resetTimer() {
 function completeTimer() {
     clearInterval(countdown);
     isRunning = false;
-    time = 25 * 60;
-    sendTimeUpdate();  // Reset the popup display
 
-    // Show the notification
-    chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'images/timer-128.png',
-        title: 'Time is up!',
-        message: 'Take a break, your 25-minute session is complete.',
-        requireInteraction: true,
-        buttons: [
-            { title: "Start Break" },
-            { title: "Skip Break" }
-        ],
-        priority: 2
-    });
+    if (mode === "work") {
+        // End of a Pomodoro session
+        time = 25 * 60;
+        sendTimeUpdate();
 
-    chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
-        if (buttonIndex === 0) { // Start Break
-            time = 5 * 60; // Set time to 5 minutes for the break
-            startTimer();
-        } else if (buttonIndex === 1) { // Skip Break
-            resetTimer(); // Reset the timer for a new 25-minute session
-        }
-    });
+        chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'images/timer-128.png',
+            title: 'Time is up!',
+            message: 'Take a break, your 25-minute session is complete.',
+            requireInteraction: true,
+            buttons: [
+                { title: "Start Break" },
+                { title: "Skip Break" }
+            ],
+            priority: 2
+        }, (notificationId) => {
+            chrome.notifications.onButtonClicked.addListener(function onWorkSessionEnd(id, buttonIndex) {
+                if (id === notificationId) {
+                    if (buttonIndex === 0) {
+                        time = 5 * 60;
+                        mode = "break";
+                        startTimer();
+                    } else if (buttonIndex === 1) {
+                        time = 25 * 60;
+                        mode = "work";
+                        sendTimeUpdate();
+                    }
+                    chrome.notifications.onButtonClicked.removeListener(onWorkSessionEnd);
+                }
+            });
+        });
+
+        // Also update popup if open
+        chrome.runtime.sendMessage({ showBreakButton: true });
+
+    } else if (mode === "break") {
+        // End of break session
+        time = 25 * 60;
+        mode = "work";
+        sendTimeUpdate();
+
+        chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'images/timer-128.png',
+            title: 'Break over!',
+            message: 'Time to start your next Pomodoro session.',
+            requireInteraction: true,
+            buttons: [{ title: "Start Next Pomodoro" }],
+            priority: 2
+        }, (notificationId) => {
+            chrome.notifications.onButtonClicked.addListener(function onBreakEnd(id, buttonIndex) {
+                if (id === notificationId && buttonIndex === 0) {
+                    startTimer();
+                    chrome.notifications.onButtonClicked.removeListener(onBreakEnd);
+                }
+            });
+        });
+    }
 }
 
 // Listen for the alarm to trigger
